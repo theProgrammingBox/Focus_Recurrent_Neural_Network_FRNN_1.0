@@ -34,8 +34,9 @@ int main()
 	const uint32_t SENSORY_DIMENSION = 3;	// vector length in each memory, stimulus, and focus
 	const uint32_t QUERY_DIMENSION = 7;		// vector length in each query
 	const uint32_t VALUE_DIMENSION = 5;		// vector length in each value
+	const uint32_t ACTION_DIMENSION = 5;	// vector length in each action
 
-	// mega parameters
+	// mega parameters for mega matrixes
 	const uint32_t GLOBAL_SENSORY_VECTORS = MEMORIES + STIMULI;								// number of memories and external stimuli
 	const uint32_t LOCAL_SENSORY_VECTORS = GLOBAL_SENSORY_VECTORS + FOCUSES;				// number of memories, external stimuli, and focuses
 	const uint32_t SENSORY_ATTENTION_PARAMETERS = 2 * QUERY_DIMENSION + VALUE_DIMENSION;	// number of sensory queries, keys, and values
@@ -47,7 +48,8 @@ int main()
 	const uint32_t SENSORY_ATTENTION_WEIGHTS_MATRIX_SIZE = SENSORY_ATTENTION_PARAMETERS * SENSORY_DIMENSION;	// size of sensory query, key, and value weights
 	const uint32_t CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE = CONTEXT_ATTENTION_PARAMETERS * VALUE_DIMENSION;		// size of context key and value weights
 	const uint32_t ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE = ACTION_VECTORS * SENSORY_DIMENSION;				// size of action weights, a vector representations for each action and a vector representing action in general
-
+	const
+	
 	// mega dynamic matrix sizes
 	const uint32_t SENSORY_MATRIX_SIZE = INITIAL_SENSORY_MATRIX_SIZE;												// size of memory, stimulus, and focus matrix
 	const uint32_t SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE = SENSORY_ATTENTION_PARAMETERS * LOCAL_SENSORY_VECTORS;	// size of sensory query, key, and value matrix
@@ -369,6 +371,15 @@ int main()
 		cout << "\n";
 	}
 	delete[] selfUpdateMatrixCPU;
+
+	cublasSgemmStridedBatched(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
+		ACTION_VECTORS, GLOBAL_SENSORY_VECTORS, SENSORY_DIMENSION,
+		&ONE,
+		sensoryAttentionParameterMatrixGPU, SENSORY_ATTENTION_PARAMETERS, DYNAMIC_PARAMETERS,
+		selfUpdateMatrixGPU, SENSORY_DIMENSION, DYNAMIC_PARAMETERS,
+		&ZERO,
+		sensoryUpdateMatrixGPU, SENSORY_DIMENSION, DYNAMIC_PARAMETERS,
+		AGENTS);
 
 	/*// print the action representation weights matrix
 	float* actionRepresentationWeightsMatrixCPU = new float[ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE];
