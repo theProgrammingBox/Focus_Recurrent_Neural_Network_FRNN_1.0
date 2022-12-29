@@ -100,8 +100,8 @@ int main()
 	float* actionRepresentationScoreMatrixGPU = selfUpdateMatrixGPU + SELF_UPDATE_MATRIX;									// same as attention, but the keys are static and they represent actions, (its just a regular matrix multiplication, through different perspective)
 	float* actionVectorGPU = actionRepresentationScoreMatrixGPU + ACTION_REPRESENTAION_SCORE_MATRIX_SIZE;					// use the sum of if each vector's similarity to each action representation times their similarity to an action in general to get the probability of each action, after a softmax
 
-	float* focusQueriesMatrixGPU = sensoryMatrixGPU + SENSORY_ATTENTION_PARAMETERS * GLOBAL_SENSORY_VECTORS;	// the focus queries matrix
-	float* sensoryKeysMatrixGPU = sensoryMatrixGPU + QUERY_DIMENSION;											// the sensory keys matrix
+	float* focusQueriesMatrixGPU = sensoryAttentionParameterMatrixGPU + SENSORY_ATTENTION_PARAMETERS * GLOBAL_SENSORY_VECTORS;	// the focus queries matrix
+	float* sensoryKeysMatrixGPU = sensoryAttentionParameterMatrixGPU + QUERY_DIMENSION;											// the sensory keys matrix
 	float* sensoryValuesMatrixGPU = sensoryKeysMatrixGPU + QUERY_DIMENSION;										// the sensory values matrix
 	float* contextValuesMatrixGPU = contextMatrixGPU + QUERY_DIMENSION;											// the context values matrix
 
@@ -263,6 +263,24 @@ int main()
 		&ZERO,
 		sensoryAttentionScoreMatrixCPU, LOCAL_SENSORY_VECTORS, DYNAMIC_PARAMETERS,
 		AGENTS);
+
+	/*// print the focus queries
+	cout << "CPU Focus Queries:\n";
+	for (int i = 0; i < FOCUSES; i++) {
+		for (int j = 0; j < QUERY_DIMENSION; j++)
+			std::cout << focusQueriesMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
+		cout << "\n";
+	}
+	cout << "\n";
+
+	// print the keys
+	cout << "CPU Sensory Keys:\n";
+	for (int i = 0; i < LOCAL_SENSORY_VECTORS; i++) {
+		for (int j = 0; j < QUERY_DIMENSION; j++)
+			std::cout << sensoryKeysMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
+		cout << "\n";
+	}
+	cout << "\n";*/
 
 	// print the sensory attention score
 	cout << "CPU Sensory Attention Score Matrix:\n";
