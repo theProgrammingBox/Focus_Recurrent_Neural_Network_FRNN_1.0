@@ -8,32 +8,6 @@ using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
 
-void cpuSgemmStridedBatched(
-	bool transB, bool transA,
-	int CCols, int CRows, int AColsBRows,
-	const float* alpha,
-	float* B, int ColsB, int SizeB,
-	float* A, int ColsA, int SizeA,
-	const float* beta,
-	float* C, int ColsC, int SizeC,
-	int batchCount)
-{
-	for (int b = batchCount; b--;)
-	{
-		for (int m = CCols; m--;)
-			for (int n = CRows; n--;)
-			{
-				float sum = 0;
-				for (int k = AColsBRows; k--;)
-					sum += (transA ? A[k * ColsA + n] : A[n * ColsA + k]) * (transB ? B[m * ColsB + k] : B[k * ColsB + m]);
-				C[n * ColsC + m] = *alpha * sum + *beta * C[n * ColsC + m];
-			}
-		A += SizeA;
-		B += SizeB;
-		C += SizeC;
-	}
-}
-
 int main()
 {
 	cublasHandle_t cublasHandle;
@@ -107,7 +81,7 @@ int main()
 
 	curandGenerateNormal(curandHandle, workspaceGPU, STATIC_PARAMETERS + (STATIC_PARAMETERS & 1), 0.0f, 0.4f);	// initialize the initial sensory bias, sensory query, key, and value, context key and value, and action representations, needs to fill in an even number of floats, and needs to be on an even address(I think, just use the address given by cudaMalloc + even number)
 
-	/*// print the initial matrix
+	// print the initial matrix
 	float* initialSensoryMatrixCPU = new float[INITIAL_SENSORY_MATRIX_SIZE];
 	cudaMemcpy(initialSensoryMatrixCPU, initialSensoryMatrixGPU, INITIAL_SENSORY_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	cout << "Agents Initial Sensory Matrix:\n";
@@ -131,7 +105,7 @@ int main()
 	cout << "\n";
 	delete[] sensoryAttentionWeightsMatrixCPU;
 
-	// print the context attention weights matrix
+	/*// print the context attention weights matrix
 	float* contextAttentionWeightsMatrixCPU = new float[CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE];
 	cudaMemcpy(contextAttentionWeightsMatrixCPU, contextAttentionWeightsMatrixGPU, CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	cout << "Agents Context Attention Weights Matrix:\n";
@@ -248,49 +222,6 @@ int main()
 		cout << "\n";
 	}
 	delete[] sensoryAttentionScoreMatrixCPU;/**/
-
-	// use cpuSgemmStridedBatched
-	sensoryAttentionScoreMatrixCPU = new float[SENSORY_ATTENTION_SCORE_MATRIX_SIZE];
-	sensoryAttentionParameterMatrixCPU = new float[SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE];
-	cudaMemcpy(sensoryAttentionParameterMatrixCPU, sensoryAttentionParameterMatrixGPU, SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-	sensoryKeysMatrixCPU = sensoryAttentionParameterMatrixCPU + QUERY_DIMENSION;
-	focusQueriesMatrixCPU = sensoryAttentionParameterMatrixCPU + SENSORY_ATTENTION_PARAMETERS * GLOBAL_SENSORY_VECTORS;
-	cpuSgemmStridedBatched(true, false,
-		LOCAL_SENSORY_VECTORS, FOCUSES, QUERY_DIMENSION,
-		&ONE,
-		sensoryKeysMatrixCPU, SENSORY_ATTENTION_PARAMETERS, DYNAMIC_PARAMETERS,
-		focusQueriesMatrixCPU, SENSORY_ATTENTION_PARAMETERS, DYNAMIC_PARAMETERS,
-		&ZERO,
-		sensoryAttentionScoreMatrixCPU, LOCAL_SENSORY_VECTORS, DYNAMIC_PARAMETERS,
-		AGENTS);
-
-	/*// print the focus queries
-	cout << "CPU Focus Queries:\n";
-	for (int i = 0; i < FOCUSES; i++) {
-		for (int j = 0; j < QUERY_DIMENSION; j++)
-			std::cout << focusQueriesMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
-		cout << "\n";
-	}
-	cout << "\n";
-
-	// print the keys
-	cout << "CPU Sensory Keys:\n";
-	for (int i = 0; i < LOCAL_SENSORY_VECTORS; i++) {
-		for (int j = 0; j < QUERY_DIMENSION; j++)
-			std::cout << sensoryKeysMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
-		cout << "\n";
-	}
-	cout << "\n";*/
-
-	// print the sensory attention score
-	cout << "CPU Sensory Attention Score Matrix:\n";
-		for (int i = 0; i < FOCUSES; i++) {
-			for (int j = 0; j < LOCAL_SENSORY_VECTORS; j++)
-				std::cout << sensoryAttentionScoreMatrixCPU[i * LOCAL_SENSORY_VECTORS + j] << " ";
-			cout << "\n";
-		}
-		cout << "\n";
-	delete[] sensoryAttentionScoreMatrixCPU;
 
 	cublasSgemmStridedBatched(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
 		VALUE_DIMENSION, FOCUSES, LOCAL_SENSORY_VECTORS,
