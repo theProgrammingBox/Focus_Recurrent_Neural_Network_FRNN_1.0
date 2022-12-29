@@ -21,49 +21,58 @@ int main()
 	const float ONE = 1.0f;
 	const float ZERO = 0.0f;
 
+	// simulation parameters
 	const uint32_t ACTIONS = 5;				// Number of actions the agent can take
 	const uint32_t AGENTS = 3;				// Number of agents
 
-	const uint32_t SENSORY_DIMENSION = 3;	// vector length in each memory, stimulus, and focus
-	const uint32_t QUERY_DIMENSION = 7;		// vector length in each query
-	const uint32_t VALUE_DIMENSION = 5;		// vector length in each value
-
+	// network sensory parameters
 	const uint32_t MEMORIES = 7;			// Number of memories per agent, a matrix of size MEMORIES x SENSORY_DIMENSION
 	const uint32_t STIMULI = 3;				// Number of stimuli per agent, a matrix of size STIMULI x SENSORY_DIMENSION
 	const uint32_t FOCUSES = 5;				// Number of focuses per agent, a matrix of size FOCUSES x SENSORY_DIMENSION
 
+	// network sensory detail parameters
+	const uint32_t SENSORY_DIMENSION = 3;	// vector length in each memory, stimulus, and focus
+	const uint32_t QUERY_DIMENSION = 7;		// vector length in each query
+	const uint32_t VALUE_DIMENSION = 5;		// vector length in each value
+
+	// mega parameters
 	const uint32_t GLOBAL_SENSORY_VECTORS = MEMORIES + STIMULI;								// number of memories and external stimuli
 	const uint32_t LOCAL_SENSORY_VECTORS = GLOBAL_SENSORY_VECTORS + FOCUSES;				// number of memories, external stimuli, and focuses
 	const uint32_t SENSORY_ATTENTION_PARAMETERS = 2 * QUERY_DIMENSION + VALUE_DIMENSION;	// number of sensory queries, keys, and values
 	const uint32_t CONTEXT_ATTENTION_PARAMETERS = QUERY_DIMENSION + SENSORY_DIMENSION;		// number of context keys and values
 	const uint32_t ACTION_VECTORS = ACTIONS + 1;											// vector representations for each action and a vector representing action in general
 
+	// mega static matrix sizes
 	const uint32_t INITIAL_SENSORY_MATRIX_SIZE = SENSORY_DIMENSION * LOCAL_SENSORY_VECTORS;						// size of initial memory, stimulus, and focus bias matrix
 	const uint32_t SENSORY_ATTENTION_WEIGHTS_MATRIX_SIZE = SENSORY_ATTENTION_PARAMETERS * SENSORY_DIMENSION;	// size of sensory query, key, and value weights
 	const uint32_t CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE = CONTEXT_ATTENTION_PARAMETERS * VALUE_DIMENSION;		// size of context key and value weights
 	const uint32_t ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE = ACTION_VECTORS * SENSORY_DIMENSION;				// size of action weights, a vector representations for each action and a vector representing action in general
 
+	// mega dynamic matrix sizes
 	const uint32_t SENSORY_MATRIX_SIZE = INITIAL_SENSORY_MATRIX_SIZE;												// size of memory, stimulus, and focus matrix
 	const uint32_t SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE = SENSORY_ATTENTION_PARAMETERS * LOCAL_SENSORY_VECTORS;	// size of sensory query, key, and value matrix
 	const uint32_t SENSORY_ATTENTION_SCORE_MATRIX_SIZE = LOCAL_SENSORY_VECTORS * FOCUSES;							// size of sensory attention score matrix
 	const uint32_t CONTEXT_MATRIX_SIZE = VALUE_DIMENSION * FOCUSES;													// size of context matrix
 	const uint32_t CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE = CONTEXT_ATTENTION_PARAMETERS * FOCUSES;				// size of context key and value matrix
 	const uint32_t CONTEXT_ATTENTION_SCORE_MATRIX_SIZE = FOCUSES * LOCAL_SENSORY_VECTORS;							// size of context attention score matrix
-	const uint32_t SELF_UPDATE_MATRIX = SENSORY_DIMENSION * LOCAL_SENSORY_VECTORS;									// size of self update matrix
+	const uint32_t SELF_UPDATE_MATRIX_SIZE = SENSORY_DIMENSION * LOCAL_SENSORY_VECTORS;									// size of self update matrix
 	const uint32_t ACTION_REPRESENTAION_SCORE_MATRIX_SIZE = ACTION_VECTORS * GLOBAL_SENSORY_VECTORS;				// size of action matrix
 	const uint32_t ACTION_VECTOR_SIZE = ACTIONS;																	// size of action probability output
 
 	const uint32_t STATIC_PARAMETERS = INITIAL_SENSORY_MATRIX_SIZE + SENSORY_ATTENTION_WEIGHTS_MATRIX_SIZE + CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE + ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE;
-	const uint32_t DYNAMIC_PARAMETERS = SENSORY_MATRIX_SIZE + SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE + SENSORY_ATTENTION_SCORE_MATRIX_SIZE + CONTEXT_MATRIX_SIZE + CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE + CONTEXT_ATTENTION_SCORE_MATRIX_SIZE + SELF_UPDATE_MATRIX + ACTION_REPRESENTAION_SCORE_MATRIX_SIZE + ACTION_VECTOR_SIZE;
+	const uint32_t DYNAMIC_PARAMETERS = SENSORY_MATRIX_SIZE + SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE + SENSORY_ATTENTION_SCORE_MATRIX_SIZE + CONTEXT_MATRIX_SIZE + CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE + CONTEXT_ATTENTION_SCORE_MATRIX_SIZE + SELF_UPDATE_MATRIX_SIZE + ACTION_REPRESENTAION_SCORE_MATRIX_SIZE + ACTION_VECTOR_SIZE;
 
+	// creating one big allocation for all the parameters
 	float* workspaceGPU;
 	cudaMalloc(&workspaceGPU, (STATIC_PARAMETERS + DYNAMIC_PARAMETERS * AGENTS) * sizeof(float));	// Allocate memory for static parameters shared by all agents and dynamic parameters are unique to each agent based on their experiences
 
+	// positions of the static matrixes in the workspace
 	float* initialSensoryMatrixGPU = workspaceGPU;																			// Initial memory, stimulus, and focus bias matrix
 	float* sensoryAttentionWeightsMatrixGPU = initialSensoryMatrixGPU + INITIAL_SENSORY_MATRIX_SIZE;						// sensory query, key, and value attention weights matrix
 	float* contextAttentionWeightsMatrixGPU = sensoryAttentionWeightsMatrixGPU + SENSORY_ATTENTION_WEIGHTS_MATRIX_SIZE;		// context key and value attention weights matrix
 	float* actionRepresentationWeightsMatrixGPU = contextAttentionWeightsMatrixGPU + CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE;	// action representations matrix, (you need to rethink how weights function to understand my naming convention)
 
+	// positions of the dynamic mega matrixes for the first agent in the workspace
 	float* sensoryMatrixGPU = actionRepresentationWeightsMatrixGPU + ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE;				// sensory matrix, contains memories, stimuli, and focuses
 	float* sensoryAttentionParameterMatrixGPU = sensoryMatrixGPU + SENSORY_MATRIX_SIZE;										// sensory query, key, and value matrix
 	float* sensoryAttentionScoreMatrixGPU = sensoryAttentionParameterMatrixGPU + SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE;	// the attention score matrix of the focus queries on the sensory matrix
@@ -71,9 +80,10 @@ int main()
 	float* contextAttentionParameterMatrixGPU = contextMatrixGPU + CONTEXT_MATRIX_SIZE;										// using the context gained through focusing on your sensory data compounded over time, make a context key and value matrix to update your sensory data
 	float* contextAttentionScoreMatrixGPU = contextAttentionParameterMatrixGPU + CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE;	// the attention score matrix of the sensory queries matrix on the context keys, kinda think of it like a what should I forget computation
 	float* selfUpdateMatrixGPU = contextAttentionScoreMatrixGPU + CONTEXT_ATTENTION_SCORE_MATRIX_SIZE;						// the matrix of how much to update your sensory data based on the sum of the context values based on the context's attention score
-	float* actionRepresentationScoreMatrixGPU = selfUpdateMatrixGPU + SELF_UPDATE_MATRIX;									// same as attention, but the keys are static and they represent actions, (its just a regular matrix multiplication, through different perspective)
+	float* actionRepresentationScoreMatrixGPU = selfUpdateMatrixGPU + SELF_UPDATE_MATRIX_SIZE;									// same as attention, but the keys are static and they represent actions, (its just a regular matrix multiplication, through different perspective)
 	float* actionVectorGPU = actionRepresentationScoreMatrixGPU + ACTION_REPRESENTAION_SCORE_MATRIX_SIZE;					// use the sum of if each vector's similarity to each action representation times their similarity to an action in general to get the probability of each action, after a softmax
 
+	// positions of the pseudo matrixes in each mega matrix in the workspace
 	float* focusQueriesMatrixGPU = sensoryAttentionParameterMatrixGPU + SENSORY_ATTENTION_PARAMETERS * GLOBAL_SENSORY_VECTORS;	// the focus queries matrix
 	float* sensoryKeysMatrixGPU = sensoryAttentionParameterMatrixGPU + QUERY_DIMENSION;											// the sensory keys matrix
 	float* sensoryValuesMatrixGPU = sensoryKeysMatrixGPU + QUERY_DIMENSION;										// the sensory values matrix
@@ -322,7 +332,43 @@ int main()
 	}
 	delete[] contextAttentionScoreMatrixCPU;/**/
 
-	//cublasSgemmStridedBatched
+	cublasSgemmStridedBatched(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
+		SENSORY_DIMENSION, LOCAL_SENSORY_VECTORS, FOCUSES,
+		&ONE,
+		contextValuesMatrixGPU, CONTEXT_ATTENTION_PARAMETERS, DYNAMIC_PARAMETERS,
+		contextAttentionScoreMatrixGPU, FOCUSES, DYNAMIC_PARAMETERS,
+		&ZERO,
+		selfUpdateMatrixGPU, SENSORY_DIMENSION, DYNAMIC_PARAMETERS,
+		AGENTS);
+
+	// print the context values
+	contextAttentionParameterMatrixCPU = new float[CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE];
+	float* contextValuesMatrixCPU = contextAttentionParameterMatrixCPU + QUERY_DIMENSION;
+	for (int agent = AGENTS; agent--;) {
+		cudaMemcpy(contextAttentionParameterMatrixCPU, contextAttentionParameterMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Context Values:\n";
+		for (int i = 0; i < FOCUSES; i++) {
+			for (int j = 0; j < SENSORY_DIMENSION; j++)
+				std::cout << contextValuesMatrixCPU[i * CONTEXT_ATTENTION_PARAMETERS + j] << " ";
+			cout << "\n";
+		}
+		cout << "\n";
+	}
+	delete[] contextAttentionParameterMatrixCPU;
+	
+	// print the self update matrix
+	float* selfUpdateMatrixCPU = new float[SELF_UPDATE_MATRIX_SIZE];
+	for (int agent = AGENTS; agent--;) {
+		cudaMemcpy(selfUpdateMatrixCPU, selfUpdateMatrixGPU + agent * DYNAMIC_PARAMETERS, SELF_UPDATE_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Self Update Matrix:\n";
+		for (int i = 0; i < LOCAL_SENSORY_VECTORS; i++) {
+			for (int j = 0; j < SENSORY_DIMENSION; j++)
+				std::cout << selfUpdateMatrixCPU[i * SENSORY_DIMENSION + j] << " ";
+			cout << "\n";
+		}
+		cout << "\n";
+	}
+	delete[] selfUpdateMatrixCPU;
 
 	/*// print the action representation weights matrix
 	float* actionRepresentationWeightsMatrixCPU = new float[ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE];
