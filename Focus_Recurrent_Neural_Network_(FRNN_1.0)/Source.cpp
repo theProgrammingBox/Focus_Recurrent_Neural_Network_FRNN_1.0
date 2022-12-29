@@ -57,7 +57,7 @@ int main()
 	const uint32_t DYNAMIC_PARAMETERS = SENSORY_MATRIX_SIZE + SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE + SENSORY_ATTENTION_SCORE_MATRIX_SIZE + CONTEXT_MATRIX_SIZE + CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE + CONTEXT_ATTENTION_SCORE_MATRIX_SIZE + SELF_UPDATE_MATRIX + ACTION_REPRESENTAION_SCORE_MATRIX_SIZE + ACTION_VECTOR_SIZE;
 
 	float* workspaceGPU;
-	cudaMalloc(&workspaceGPU, STATIC_PARAMETERS + DYNAMIC_PARAMETERS * AGENTS * sizeof(float));	// Allocate memory for static parameters shared by all agents and dynamic parameters are unique to each agent based on their experiences
+	cudaMalloc(&workspaceGPU, (STATIC_PARAMETERS + DYNAMIC_PARAMETERS * AGENTS) * sizeof(float));	// Allocate memory for static parameters shared by all agents and dynamic parameters are unique to each agent based on their experiences
 
 	float* initialSensoryMatrixGPU = workspaceGPU;																			// Initial memory, stimulus, and focus bias matrix
 	float* sensoryAttentionWeightsMatrixGPU = initialSensoryMatrixGPU + INITIAL_SENSORY_MATRIX_SIZE;						// sensory query, key, and value attention weights matrix
@@ -77,7 +77,7 @@ int main()
 	float* focusQueriesMatrixGPU = sensoryAttentionParameterMatrixGPU + SENSORY_ATTENTION_PARAMETERS * GLOBAL_SENSORY_VECTORS;	// the focus queries matrix
 	float* sensoryKeysMatrixGPU = sensoryAttentionParameterMatrixGPU + QUERY_DIMENSION;											// the sensory keys matrix
 	float* sensoryValuesMatrixGPU = sensoryKeysMatrixGPU + QUERY_DIMENSION;										// the sensory values matrix
-	float* contextValuesMatrixGPU = contextMatrixGPU + QUERY_DIMENSION;											// the context values matrix
+	float* contextValuesMatrixGPU = contextAttentionParameterMatrixGPU + QUERY_DIMENSION;											// the context values matrix
 
 	curandGenerateNormal(curandHandle, workspaceGPU, STATIC_PARAMETERS + (STATIC_PARAMETERS & 1), 0.0f, 0.4f);	// initialize the initial sensory bias, sensory query, key, and value, context key and value, and action representations, needs to fill in an even number of floats, and needs to be on an even address(I think, just use the address given by cudaMalloc + even number)
 
@@ -104,30 +104,6 @@ int main()
 	}
 	cout << "\n";
 	delete[] sensoryAttentionWeightsMatrixCPU;
-
-	/*// print the context attention weights matrix
-	float* contextAttentionWeightsMatrixCPU = new float[CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE];
-	cudaMemcpy(contextAttentionWeightsMatrixCPU, contextAttentionWeightsMatrixGPU, CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-	cout << "Agents Context Attention Weights Matrix:\n";
-	for (int i = 0; i < VALUE_DIMENSION; i++) {
-		for (int j = 0; j < CONTEXT_ATTENTION_PARAMETERS; j++)
-			std::cout << contextAttentionWeightsMatrixCPU[i * CONTEXT_ATTENTION_PARAMETERS + j] << " ";
-		cout << "\n";
-	}
-	cout << "\n";
-	delete[] contextAttentionWeightsMatrixCPU;
-
-	// print the action representation weights matrix
-	float* actionRepresentationWeightsMatrixCPU = new float[ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE];
-	cudaMemcpy(actionRepresentationWeightsMatrixCPU, actionRepresentationWeightsMatrixGPU, ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-	cout << "Agents Action Representation Weights Matrix:\n";
-	for (int i = 0; i < SENSORY_DIMENSION; i++) {
-		for (int j = 0; j < ACTION_VECTORS; j++)
-			std::cout << actionRepresentationWeightsMatrixCPU[i * ACTION_VECTORS + j] << " ";
-		cout << "\n";
-	}
-	cout << "\n";
-	delete[] actionRepresentationWeightsMatrixCPU;*/
 
 	// copy initial sensory matrix to each agent's sensory matrix
 	for (int agent = AGENTS; agent--;)
@@ -232,19 +208,34 @@ int main()
 		contextMatrixGPU, VALUE_DIMENSION, DYNAMIC_PARAMETERS,
 		AGENTS);
 
-	/*// print the context matrix
-	float* contextMatrixCPU = new float[CONTEXT_MATRIX_SIZE];
+	// print the sensory values
+	sensoryAttentionParameterMatrixCPU = new float[SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE];
+	float* sensoryValuesMatrixCPU = sensoryAttentionParameterMatrixCPU + 2 * QUERY_DIMENSION;
 	for (int agent = AGENTS; agent--;) {
-		cudaMemcpy(contextMatrixCPU, contextMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
-		cout << "Agent " << agent << " Context Matrix:\n";
-		for (int i = 0; i < VALUE_DIMENSION; i++) {
-			for (int j = 0; j < FOCUSES; j++)
-				std::cout << contextMatrixCPU[i * FOCUSES + j] << " ";
+		cudaMemcpy(sensoryAttentionParameterMatrixCPU, sensoryAttentionParameterMatrixGPU + agent * DYNAMIC_PARAMETERS, SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Sensory Values:\n";
+		for (int i = 0; i < LOCAL_SENSORY_VECTORS; i++) {
+			for (int j = 0; j < VALUE_DIMENSION; j++)
+				std::cout << sensoryValuesMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
 			cout << "\n";
 		}
 		cout << "\n";
 	}
-	delete[] contextMatrixCPU;*/
+	delete[] sensoryAttentionParameterMatrixCPU;
+
+	// print the context matrix
+	float* contextMatrixCPU = new float[CONTEXT_MATRIX_SIZE];
+	for (int agent = AGENTS; agent--;) {
+		cudaMemcpy(contextMatrixCPU, contextMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Context Matrix:\n";
+		for (int i = 0; i < FOCUSES; i++) {
+			for (int j = 0; j < VALUE_DIMENSION; j++)
+				std::cout << contextMatrixCPU[i * VALUE_DIMENSION + j] << " ";
+			cout << "\n";
+		}
+		cout << "\n";
+	}
+	delete[] contextMatrixCPU;/**/
 
 	cublasSgemmStridedBatched(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
 		CONTEXT_ATTENTION_PARAMETERS, FOCUSES, VALUE_DIMENSION,
@@ -255,7 +246,19 @@ int main()
 		contextAttentionParameterMatrixGPU, CONTEXT_ATTENTION_PARAMETERS, DYNAMIC_PARAMETERS,
 		AGENTS);
 
-	/*// print the context attention parameters
+	// print the context attention weights matrix
+	float* contextAttentionWeightsMatrixCPU = new float[CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE];
+	cudaMemcpy(contextAttentionWeightsMatrixCPU, contextAttentionWeightsMatrixGPU, CONTEXT_ATTENTION_WEIGHTS_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+	cout << "Agents Context Attention Weights Matrix:\n";
+	for (int i = 0; i < VALUE_DIMENSION; i++) {
+		for (int j = 0; j < CONTEXT_ATTENTION_PARAMETERS; j++)
+			std::cout << contextAttentionWeightsMatrixCPU[i * CONTEXT_ATTENTION_PARAMETERS + j] << " ";
+		cout << "\n";
+	}
+	cout << "\n";
+	delete[] contextAttentionWeightsMatrixCPU;
+
+	// print the context attention parameters
 	float* contextAttentionParameterMatrixCPU = new float[CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE];
 	for (int agent = AGENTS; agent--;) {
 		cudaMemcpy(contextAttentionParameterMatrixCPU, contextAttentionParameterMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
@@ -267,7 +270,7 @@ int main()
 		}
 		cout << "\n";
 	}
-	delete[] contextAttentionParameterMatrixCPU;*/
+	delete[] contextAttentionParameterMatrixCPU;/**/
 
 	cublasSgemmStridedBatched(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N,
 		FOCUSES, LOCAL_SENSORY_VECTORS, QUERY_DIMENSION,
@@ -278,7 +281,34 @@ int main()
 		contextAttentionScoreMatrixGPU, FOCUSES, DYNAMIC_PARAMETERS,
 		AGENTS);
 
-	/*// print the context attention scores
+	// print the sensory query
+	sensoryAttentionParameterMatrixCPU = new float[SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE];
+	for (int agent = AGENTS; agent--;) {
+		cudaMemcpy(sensoryAttentionParameterMatrixCPU, sensoryAttentionParameterMatrixGPU + agent * DYNAMIC_PARAMETERS, SENSORY_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Sensory Query:\n";
+		for (int i = 0; i < LOCAL_SENSORY_VECTORS; i++) {
+			for (int j = 0; j < QUERY_DIMENSION; j++)
+				std::cout << sensoryAttentionParameterMatrixCPU[i * SENSORY_ATTENTION_PARAMETERS + j] << " ";
+			cout << "\n";
+		}
+		cout << "\n";
+	}
+	delete[] sensoryAttentionParameterMatrixCPU;
+
+	// print the context keys
+	contextAttentionParameterMatrixCPU = new float[CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE];
+	for (int agent = AGENTS; agent--;) {
+		cudaMemcpy(contextAttentionParameterMatrixCPU, contextAttentionParameterMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_ATTENTION_PARAMETER_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+		cout << "Agent " << agent << " Context Keys:\n";
+		for (int i = 0; i < FOCUSES; i++) {
+			for (int j = 0; j < QUERY_DIMENSION; j++)
+				std::cout << contextAttentionParameterMatrixCPU[i * CONTEXT_ATTENTION_PARAMETERS + j] << " ";
+			cout << "\n";
+		}
+		cout << "\n";
+	}
+
+	// print the context attention scores
 	float* contextAttentionScoreMatrixCPU = new float[CONTEXT_ATTENTION_SCORE_MATRIX_SIZE];
 	for (int agent = AGENTS; agent--;) {
 		cudaMemcpy(contextAttentionScoreMatrixCPU, contextAttentionScoreMatrixGPU + agent * DYNAMIC_PARAMETERS, CONTEXT_ATTENTION_SCORE_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
@@ -290,7 +320,21 @@ int main()
 		}
 		cout << "\n";
 	}
-	delete[] contextAttentionScoreMatrixCPU;*/
+	delete[] contextAttentionScoreMatrixCPU;/**/
+
+	//cublasSgemmStridedBatched
+
+	/*// print the action representation weights matrix
+	float* actionRepresentationWeightsMatrixCPU = new float[ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE];
+	cudaMemcpy(actionRepresentationWeightsMatrixCPU, actionRepresentationWeightsMatrixGPU, ACTION_REPRESENTAION_WEIGHTS_MATRIX_SIZE * sizeof(float), cudaMemcpyDeviceToHost);
+	cout << "Agents Action Representation Weights Matrix:\n";
+	for (int i = 0; i < SENSORY_DIMENSION; i++) {
+		for (int j = 0; j < ACTION_VECTORS; j++)
+			std::cout << actionRepresentationWeightsMatrixCPU[i * ACTION_VECTORS + j] << " ";
+		cout << "\n";
+	}
+	cout << "\n";
+	delete[] actionRepresentationWeightsMatrixCPU;*/
 	
 	cudaFree(workspaceGPU);
 
